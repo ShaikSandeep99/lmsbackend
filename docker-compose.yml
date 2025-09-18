@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: lms_postgres
+    restart: always
+
+    # Map container port 5432 to host port 5432
+    ports:
+      - "5432:5432"
+
+    environment:
+      POSTGRES_USER: lmsuser
+      POSTGRES_PASSWORD: StrongPass!123
+      POSTGRES_DB: lmsdb
+      POSTGRES_INITDB_ARGS: "--auth=scram-sha-256"
+
+    # Persist database data locally in ./pgdata
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
