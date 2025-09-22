@@ -19,7 +19,7 @@ def create_mentor(data: MentorCreate, db: Session = Depends(get_db)):
     mentor = User(
         email=data.email,
         full_name=data.full_name,
-        phoneNumber=data.phoneNumber,
+        phone_number=data.phoneNumber,
         hashed_password=hash_password(data.password),
         role=RoleEnum.mentor,
     )

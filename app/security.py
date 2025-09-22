@@ -1,49 +1,102 @@
-from datetime import datetime, timedelta
-from typing import Optional
-from jose import jwt
+# app/security.py
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
+
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt  # PyJWT
 from passlib.context import CryptContext
+from sqlalchemy.orm import Session
 
-from app.config import settings
+from app.config import (
+    JWT_ALG,
+    ACCESS_SECRET,
+    REFRESH_SECRET,
+    ACCESS_MIN,
+    REFRESH_DAYS,
+)
+from app.database import get_db
+from app.models import User
 
-# Password hashing context (bcrypt)
+# ---- Password hashing ----
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
-# ------------------------
-# Password helpers
-# ------------------------
-def hash_password(plain_password: str) -> str:
-    """Hash a plain text password using bcrypt."""
-    return pwd_context.hash(plain_password)
+def verify_password(plain_password: str, password_hash: str) -> bool:
+    return plain_password == password_hash
 
+# ---- Time helper ----
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain text password against the hashed password."""
-    return pwd_context.verify(plain_password, hashed_password)
+# ---- Token creation ----
+def create_access_token(
+    sub: str,
+    extra: Optional[Dict[str, Any]] = None,
+    minutes: int = ACCESS_MIN,
+) -> str:
+    payload: Dict[str, Any] = {
+        "sub": str(sub),
+        "type": "access",
+        "iat": int(_now().timestamp()),
+        "exp": int((_now() + timedelta(minutes=minutes)).timestamp()),
+    }
+    if extra:
+        payload.update(extra)
+    return jwt.encode(payload, ACCESS_SECRET, algorithm=JWT_ALG)
 
+def create_refresh_token(
+    sub: str,
+    extra: Optional[Dict[str, Any]] = None,
+    days: int = REFRESH_DAYS,
+) -> str:
+    payload: Dict[str, Any] = {
+        "sub": str(sub),
+        "type": "refresh",
+        "iat": int(_now().timestamp()),
+        "exp": int((_now() + timedelta(days=days)).timestamp()),
+    }
+    if extra:
+        payload.update(extra)
+    return jwt.encode(payload, REFRESH_SECRET, algorithm=JWT_ALG)
 
-# ------------------------
-# JWT helpers
-# ------------------------
-def create_access_token(subject: str) -> str:
-    """Create an access JWT token (short-lived)."""
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"sub": subject, "exp": expire}
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm="HS256")
+# ---- Token decode/validate ----
+def decode_access(token: str) -> Dict[str, Any]:
+    try:
+        payload = jwt.decode(token, ACCESS_SECRET, algorithms=[JWT_ALG])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
+def decode_refresh_token(token: str) -> Dict[str, Any]:
+    try:
+        payload = jwt.decode(token, REFRESH_SECRET, algorithms=[JWT_ALG])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-def create_refresh_token(subject: str) -> str:
-    """Create a refresh JWT token (long-lived)."""
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode = {"sub": subject, "exp": expire, "type": "refresh"}
-    return jwt.encode(to_encode, settings.JWT_REFRESH_SECRET, algorithm="HS256")
+# ---- Bearer-only security for Swagger (/docs) ----
+bearer_scheme = HTTPBearer(auto_error=True)
 
+def get_current_payload(credentials: HTTPAuthorizationCredentials = Security(bearer_scheme)) -> Dict[str, Any]:
+    return decode_access(credentials.credentials)
 
-def decode_access(token: str) -> dict:
-    """Decode & verify an access token."""
-    return jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
-
-
-def decode_refresh(token: str) -> dict:
-    """Decode & verify a refresh token."""
-    return jwt.decode(token, settings.JWT_REFRESH_SECRET, algorithms=["HS256"])
+def get_current_user(
+    payload: Dict[str, Any] = Depends(get_current_payload),
+    db: Session = Depends(get_db),
+) -> User:
+    user_id = payload.get("sub")
+    user = db.get(User, int(user_id)) if user_id is not None else None
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or not found")
+    return user
