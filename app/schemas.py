@@ -92,3 +92,5 @@ class MentorCreate(BaseModel):
     @classmethod
     def validate_email(cls, v: str) -> str:
         return _allow_local_email(v)
+
+

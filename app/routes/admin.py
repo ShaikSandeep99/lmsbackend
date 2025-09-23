@@ -20,10 +20,11 @@ def create_mentor(data: MentorCreate, db: Session = Depends(get_db)):
         email=data.email,
         full_name=data.full_name,
         phone_number=data.phoneNumber,
-        hashed_password=hash_password(data.password),
+        hashed_password=data.password,
         role=RoleEnum.mentor,
     )
     db.add(mentor)
     db.commit()
     db.refresh(mentor)
     return mentor
+

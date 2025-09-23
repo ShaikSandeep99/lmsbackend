@@ -34,8 +34,8 @@ def root():
 
 # ---- Seed a default admin from environment on startup
 # Avoid .local/.test/.example/.invalid unless you relaxed EmailStr validation
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@lms.dev")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Admin@123")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 @app.on_event("startup")
 def seed_admin():

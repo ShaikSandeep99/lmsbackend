@@ -44,3 +44,4 @@ def require_any_role(*roles: RoleEnum):
             raise HTTPException(status_code=403, detail="Forbidden")
         return user
     return _checker
+
