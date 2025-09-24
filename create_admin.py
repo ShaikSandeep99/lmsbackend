@@ -11,7 +11,7 @@ def main():
             admin = User(
                 email=settings.ADMIN_EMAIL,
                 full_name="System Admin",
-                hashed_password=hash_password(settings.ADMIN_PASSWORD),
+                hashed_password=settings.ADMIN_PASSWORD,
                 role=RoleEnum.admin
             )
             db.add(admin)
