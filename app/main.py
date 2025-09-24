@@ -46,7 +46,7 @@ def seed_admin():
             u = User(
                 email=ADMIN_EMAIL,
                 full_name="Admin",
-                hashed_password=hash_password(ADMIN_PASSWORD),
+                hashed_password=ADMIN_PASSWORD,
                 role=RoleEnum.admin,
                 is_active=True,
             )

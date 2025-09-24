@@ -22,5 +22,5 @@ REFRESH_SECRET = settings.JWT_REFRESH_SECRET or "change-me-refresh"
 ACCESS_MIN = int(os.getenv("ACCESS_MIN", "240"))     # 4 hours
 REFRESH_DAYS = int(os.getenv("REFRESH_DAYS", "7"))   # 7 days
 # (optional) also export admin creds if other files import them directly
-ADMIN_EMAIL = settings.ADMIN_EMAIL or "admin@lms.dev"
-ADMIN_PASSWORD = settings.ADMIN_PASSWORD or "Admin@123"
+ADMIN_EMAIL = settings.ADMIN_EMAIL
+ADMIN_PASSWORD = settings.ADMIN_PASSWORD 
