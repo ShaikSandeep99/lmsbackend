@@ -23,10 +23,13 @@ app = FastAPI(
 from app.routes.auth import router as auth_router
 from app.routes.users import router as users_router
 from app.routes.admin import router as admin_router
+from app.routes.student import router as student_router
 
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(student_router)
+
 
 @app.get("/")
 def root():

@@ -7,6 +7,7 @@ from app.schemas import UserOut
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-@router.get("/me", response_model=UserOut)
+@router.get("/usersDetails", response_model=UserOut)
 def get_my_profile(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return current_user
+
