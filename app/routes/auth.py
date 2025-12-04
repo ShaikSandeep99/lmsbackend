@@ -2,8 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -26,9 +25,9 @@ from app.security import (
     decode_refresh_token,
 )
 from app.services.registration import create_student, create_mentor
+import json
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
 
 # ---------------------------
 # Helpers
@@ -41,9 +40,6 @@ def _ensure_unique_email(db: Session, email: str):
         raise HTTPException(status_code=400, detail="Email already registered")
 
 async def _save_upload(file: Optional[UploadFile], subdir: str) -> Optional[str]:
-    """
-    Save uploads locally (stub: replace with S3/CDN in production).
-    """
     if not file:
         return None
     import os, uuid, pathlib
@@ -56,17 +52,19 @@ async def _save_upload(file: Optional[UploadFile], subdir: str) -> Optional[str]
         f.write(await file.read())
     return f"/{path}"
 
-
 # ---------------------------
-# Student register
+# Student register (JSON + files)
 # ---------------------------
 @router.post("/register/student", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register_student(
-    payload: StudentRegisterIn = Depends(StudentRegisterIn.as_form),
+    data: str = Form(...),
     db: Session = Depends(get_db),
     photo: UploadFile | None = File(None),
     document: UploadFile | None = File(None),
 ):
+    payload_dict = json.loads(data)
+    payload = StudentRegisterIn(**payload_dict)
+
     email = _normalize_email(str(payload.email))
     _ensure_unique_email(db, email)
 
@@ -76,16 +74,18 @@ async def register_student(
     user = create_student(db, payload, photo_url=photo_url, document_url=document_url)
     return user
 
-
 # ---------------------------
-# Mentor register
+# Mentor register (JSON + file)
 # ---------------------------
 @router.post("/register/mentor", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register_mentor(
-    payload: MentorRegisterIn = Depends(MentorRegisterIn.as_form),
+    data: str = Form(...),
     db: Session = Depends(get_db),
     resume: UploadFile | None = File(None),
 ):
+    payload_dict = json.loads(data)
+    payload = MentorRegisterIn(**payload_dict)
+
     email = _normalize_email(str(payload.email))
     _ensure_unique_email(db, email)
 
@@ -93,22 +93,19 @@ async def register_mentor(
     user = create_mentor(db, payload, resume_url=resume_url)
     return user
 
-
 # ---------------------------
-# Login / Refresh
+# Login / Refresh (JSON only)
 # ---------------------------
 @router.post("/login", response_model=TokenPair)
 def login(form: LoginIn, db: Session = Depends(get_db)):
     email = _normalize_email(form.email)
     user = db.query(User).filter(User.email == email).first()
-
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     access_token = create_access_token(sub=str(user.id), extra={"role": str(user.role)})
     refresh_token = create_refresh_token(sub=str(user.id))
     return TokenPair(access_token=access_token, refresh_token=refresh_token)
-
 
 @router.post("/refresh", response_model=TokenPair)
 def refresh(data: RefreshIn):
@@ -125,9 +122,8 @@ def refresh(data: RefreshIn):
         refresh_token=create_refresh_token(sub=user_id),
     )
 
-
 # ---------------------------
-# Forgot / Reset password
+# Forgot / Reset password (JSON only)
 # ---------------------------
 @router.post("/forgot")
 def forgot(data: ForgotIn, db: Session = Depends(get_db)):
@@ -135,10 +131,8 @@ def forgot(data: ForgotIn, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == email).first()
     if user:
         reset_token = generate_reset_token(db, user)
-        # TODO: send email with reset link containing the token
         return {"message": "Reset token generated (dev)", "token": reset_token}
     return {"message": "If the email exists, a reset link has been sent"}
-
 
 @router.post("/reset")
 def reset(data: ResetIn, db: Session = Depends(get_db)):
@@ -156,7 +150,6 @@ def reset(data: ResetIn, db: Session = Depends(get_db)):
     prt.used = True
     db.commit()
     return {"message": "Password reset successful"}
-
 
 # ---------------------------
 # Internal helper

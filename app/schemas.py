@@ -334,6 +334,39 @@ class MeOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+
+# ------------------------
+# Admin dashboard schemas
+# ------------------------
+
+
+class AdminDashboardOut(BaseModel):
+    id: int
+    batches_completed_count: int
+    students_hired: int
+    no_of_students: int
+    no_of_mentors: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+# class AdminDashboardOut(BaseModel):
+#     id: int
+
+#     batches_completed_count: int = Field(alias="batchesCompleted")
+#     students_hired: int = Field(alias="studentsHired")
+#     no_of_students: int = Field(alias="noOfStudents")
+#     no_of_mentors: int = Field(alias="noOfMentors")
+
+#     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+
+
+
+
+
+
+
 # --- Rebuild (helps with forward-ref edges in Pydantic v2) ---
 try:
     StudentRegisterIn.model_rebuild()

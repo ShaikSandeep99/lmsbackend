@@ -5,9 +5,9 @@ from typing import Optional, List
 from enum import Enum as PyEnum
 
 from sqlalchemy import (
-    String, Integer, DateTime, Date, ForeignKey, Enum, Boolean, Text, UniqueConstraint
+    String, Integer, DateTime, Date, ForeignKey, Enum, Boolean, Text, UniqueConstraint, event
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 
 from app.database import Base
 
@@ -47,7 +47,6 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     phone_number: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
-    # One-to-one profiles (only one will exist depending on role)
     student_profile: Mapped[Optional["StudentProfile"]] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
@@ -88,7 +87,6 @@ class StudentProfile(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # requested fields
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
     phone_number: Mapped[Optional[str]] = mapped_column(String(20))
@@ -97,12 +95,10 @@ class StudentProfile(Base):
     gender: Mapped[Optional[GenderEnum]] = mapped_column(Enum(GenderEnum))
     address: Mapped[Optional[str]] = mapped_column(Text)
 
-    # uploads (store paths/URLs; real files handled by storage layer)
     photo_url: Mapped[Optional[str]] = mapped_column(String(512))
     resume_url: Mapped[Optional[str]] = mapped_column(String(512))
 
-    # interests / referrals
-    course_interest: Mapped[Optional[str]] = mapped_column(String(255))  # e.g., "Python Full Stack"
+    course_interest: Mapped[Optional[str]] = mapped_column(String(255))
     is_referred: Mapped[bool] = mapped_column(Boolean, default=False)
     referral_code: Mapped[Optional[str]] = mapped_column(String(50), index=True)
 
@@ -118,7 +114,6 @@ class Technology(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
-    # examples to seed: "Python", "Java", "Web Technologies", "React", "Django", "Spring Boot", etc.
 
     mentor_links: Mapped[List["MentorTechnology"]] = relationship(
         "MentorTechnology", back_populates="technology", cascade="all, delete-orphan"
@@ -156,32 +151,111 @@ class MentorProfile(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # requested + sensible extras for a good mentor profile
     name: Mapped[str] = mapped_column(String(150))
     phone_number: Mapped[Optional[str]] = mapped_column(String(20))
     dob: Mapped[Optional[date]] = mapped_column(Date)
     gender: Mapped[Optional[GenderEnum]] = mapped_column(Enum(GenderEnum))
     address: Mapped[Optional[str]] = mapped_column(Text)
 
-    # experience
-    experience_summary: Mapped[Optional[str]] = mapped_column(Text)  # short bio / domains mentored
-    total_experience_years: Mapped[Optional[int]] = mapped_column(Integer)  # whole years
-    total_experience_months: Mapped[Optional[int]] = mapped_column(Integer)  # leftover months 0-11
+    experience_summary: Mapped[Optional[str]] = mapped_column(Text)
+    total_experience_years: Mapped[Optional[int]] = mapped_column(Integer)
+    total_experience_months: Mapped[Optional[int]] = mapped_column(Integer)
 
-    # uploads & links
     resume_url: Mapped[Optional[str]] = mapped_column(String(512))
     linkedin_url: Mapped[Optional[str]] = mapped_column(String(512))
     portfolio_url: Mapped[Optional[str]] = mapped_column(String(512))
 
-    # preferences
-    preferred_mode: Mapped[Optional[ModeEnum]] = mapped_column(Enum(ModeEnum))  # online/offline/hybrid
+    preferred_mode: Mapped[Optional[ModeEnum]] = mapped_column(Enum(ModeEnum))
     availability_hours_per_week: Mapped[Optional[int]] = mapped_column(Integer)
 
-    # many-to-many technologies
     technologies_link: Mapped[List["MentorTechnology"]] = relationship(
         "MentorTechnology", back_populates="mentor_profile", cascade="all, delete-orphan"
     )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    batches: Mapped[List["Batch"]] = relationship(
+        "Batch", back_populates="mentor", cascade="all, delete-orphan"
+    )
 
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     user: Mapped["User"] = relationship("User", back_populates="mentor_profile")
+
+
+# --- Admin dashboard ---
+
+
+
+
+class AdminDashboard(Base):
+    __tablename__ = "admin_dashboard"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    batches_completed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    students_hired: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    no_of_students: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    no_of_mentors: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    hires: Mapped[List["StudentsHired"]] = relationship(
+        "StudentsHired", back_populates="dashboard", cascade="all, delete-orphan"
+    )
+
+    def update_counts(self, db: Session):
+        """Update dashboard counts"""
+        self.students_hired = db.query(StudentsHired).filter(StudentsHired.dashboard_id == self.id).count()
+        self.batches_completed_count = db.query(Batch).filter(Batch.status == "Completed").count()
+        self.no_of_students = db.query(User).filter(User.role == RoleEnum.student).count()
+        self.no_of_mentors = db.query(User).filter(User.role == RoleEnum.mentor).count()
+
+
+# --- Students hired ---
+
+class StudentsHired(Base):
+    __tablename__ = "students_hired"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+
+    fullname: Mapped[str] = mapped_column(String(100), nullable=False)
+    email: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    hired_company: Mapped[str] = mapped_column(String(150), nullable=False)
+    hired_date: Mapped[Date] = mapped_column(Date, nullable=False)
+    batch_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("batches.id"), nullable=True)
+    dashboard_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("admin_dashboard.id"), nullable=True)
+
+    dashboard: Mapped[Optional["AdminDashboard"]] = relationship("AdminDashboard", back_populates="hires")
+    batch: Mapped[Optional["Batch"]] = relationship("Batch", back_populates="students_hired")
+
+
+# --- Batch table ---
+
+class Batch(Base):
+    __tablename__ = "batches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    batch_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    no_of_students: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    completion_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    mentor_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("mentor_profiles.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    mentor: Mapped[Optional["MentorProfile"]] = relationship("MentorProfile", back_populates="batches")
+    students_hired: Mapped[List["StudentsHired"]] = relationship(
+        "StudentsHired", back_populates="batch", cascade="all, delete-orphan"
+    )
+
+
+# --- Auto-update dashboard counts after hiring ---
+
+@event.listens_for(StudentsHired, "after_insert")
+def update_dashboard_counts(mapper, connection, target):
+    """Automatically update AdminDashboard counts when a student is hired"""
+    db = Session(bind=connection)
+    if target.dashboard_id:
+        dashboard = db.get(AdminDashboard, target.dashboard_id)
+        if dashboard:
+            dashboard.update_counts(db)
+            db.commit()
