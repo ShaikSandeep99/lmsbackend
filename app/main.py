@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 import os
 
+
 from app.database import Base, engine, SessionLocal
 from app import models  # ensure models are imported so tables are known
 from app.models import User, RoleEnum

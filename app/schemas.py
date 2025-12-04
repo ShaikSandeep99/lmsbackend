@@ -1,14 +1,16 @@
 # app/schemas.py
+
 from __future__ import annotations
 from typing import Optional, List, Annotated
 from datetime import date
 
 from fastapi import Form
 from pydantic import BaseModel, Field, ConfigDict, field_validator, EmailStr
-from pydantic import FieldValidationInfo  # pydantic v2
+from pydantic import FieldValidationInfo  # Pydantic v2
 
 # Pull enums from your models to avoid duplication
-from app.models import RoleEnum, GenderEnum, ModeEnum
+from app.models import RoleEnum, GenderEnum, ModeEnum, Batch
+
 
 # ------------------------
 # Helpers
@@ -117,13 +119,14 @@ class MentorCreate(BaseModel):
     def validate_email(cls, v: str) -> str:
         return _allow_local_email(v)
 
+
 # ======================================================================
 # Role-specific registration & profile schemas
 # ======================================================================
 
+
 # ---------- Student ----------
 class StudentRegisterIn(BaseModel):
-    # exact field names
     first_name: str = Field(alias="firstName")
     last_name: str = Field(alias="lastName")
     gender: str
@@ -154,20 +157,17 @@ class StudentRegisterIn(BaseModel):
             raise ValueError(f"gender must be one of {allowed}")
         return v.lower()
 
-    # Accept as multipart/form-data
     @classmethod
     def as_form(
         cls,
-        # REQUIRED first
         firstName: Annotated[str, Form(...)],
         lastName: Annotated[str, Form(...)],
         gender: Annotated[str, Form(...)],
-        dob: Annotated[str, Form(...)],            # YYYY-MM-DD
+        dob: Annotated[str, Form(...)],
         phoneNumber: Annotated[str, Form(...)],
         email: Annotated[str, Form(...)],
         password: Annotated[str, Form(...)],
         confirm_password: Annotated[str, Form(...)],
-        # OPTIONAL after
         isReferred: Annotated[bool, Form()] = False,
         courseInterest: Annotated[Optional[str], Form()] = None,
         referralCode: Annotated[Optional[str], Form()] = None,
@@ -190,6 +190,7 @@ class StudentRegisterIn(BaseModel):
             isReferred=isReferred,
         )
 
+
 class StudentOut(BaseModel):
     user: UserOut
     first_name: str = Field(alias="firstName")
@@ -197,7 +198,7 @@ class StudentOut(BaseModel):
     phone_number: Optional[str] = Field(default=None, alias="phoneNumber")
     whatsapp_number: Optional[str] = Field(default=None, alias="whatsappNumber")
     dob: Optional[date] = None
-    gender: Optional[GenderEnum] = None
+    gender: Optional[RoleEnum] = None
     address: Optional[str] = None
     course_interest: Optional[str] = Field(default=None, alias="courseInterest")
     is_referred: bool = Field(alias="isReferred")
@@ -207,33 +208,26 @@ class StudentOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+
 # ---------- Mentor ----------
 class MentorRegisterIn(BaseModel):
-    # auth
     email: EmailStr
     password: str = Field(min_length=8)
     confirm_password: str = Field(min_length=8)
 
-    # profile
     name: str
     phone_number: Optional[str] = Field(default=None, alias="phoneNumber")
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
     address: Optional[str] = None
 
-    # experience
     total_experience_years: Optional[int] = Field(default=None, ge=0, le=60, alias="totalExperienceYears")
     total_experience_months: Optional[int] = Field(default=None, ge=0, le=11, alias="totalExperienceMonths")
     experience_summary: Optional[str] = Field(default=None, alias="experienceSummary")
 
-    # preferences
     preferred_mode: Optional[ModeEnum] = Field(default=None, alias="preferredMode")
     availability_hours_per_week: Optional[int] = Field(default=None, ge=0, le=80, alias="availabilityHoursPerWeek")
-
-    # techs by name
     technologies: List[str] = Field(default_factory=list)
-
-    # uploads & links
     linkedin_url: Optional[str] = Field(default=None, alias="linkedinUrl")
     portfolio_url: Optional[str] = Field(default=None, alias="portfolioUrl")
 
@@ -251,31 +245,24 @@ class MentorRegisterIn(BaseModel):
         if pw != v:
             raise ValueError("Passwords do not match")
         return v
+
     @classmethod
     def as_form(
         cls,
-        # REQUIRED first (no defaults)
         email: Annotated[str, Form(...)],
         password: Annotated[str, Form(...)],
         confirm_password: Annotated[str, Form(...)],
         name: Annotated[str, Form(...)],
-
-        # OPTIONAL after (defaults set with '='; not inside Form)
         phoneNumber: Annotated[Optional[str], Form()] = None,
-        dob: Annotated[Optional[str], Form()] = None,             # "YYYY-MM-DD" (Pydantic parses to date)
-        gender: Annotated[Optional[str], Form()] = None,          # "male"/"female"/"other" (to GenderEnum)
+        dob: Annotated[Optional[str], Form()] = None,
+        gender: Annotated[Optional[str], Form()] = None,
         address: Annotated[Optional[str], Form()] = None,
-
         totalExperienceYears: Annotated[Optional[int], Form()] = None,
         totalExperienceMonths: Annotated[Optional[int], Form()] = None,
         experienceSummary: Annotated[Optional[str], Form()] = None,
-
-        preferredMode: Annotated[Optional[str], Form()] = None,   # to ModeEnum
+        preferredMode: Annotated[Optional[str], Form()] = None,
         availabilityHoursPerWeek: Annotated[Optional[int], Form()] = None,
-
-        # For lists in multipart/form-data, repeat the key: technologies=React&technologies=FastAPI ...
         technologies: Annotated[Optional[List[str]], Form()] = None,
-
         linkedinUrl: Annotated[Optional[str], Form()] = None,
         portfolioUrl: Annotated[Optional[str], Form()] = None,
     ):
@@ -284,19 +271,20 @@ class MentorRegisterIn(BaseModel):
             password=password,
             confirm_password=confirm_password,
             name=name,
-            phone_number=phoneNumber,
-            dob=dob,  # Pydantic will parse "YYYY-MM-DD" to date
-            gender=gender,  # Pydantic will coerce to GenderEnum if provided
+            phoneNumber=phoneNumber,
+            dob=dob,
+            gender=gender,
             address=address,
-            total_experience_years=totalExperienceYears,
-            total_experience_months=totalExperienceMonths,
-            experience_summary=experienceSummary,
-            preferred_mode=preferredMode,  # coerces to ModeEnum
-            availability_hours_per_week=availabilityHoursPerWeek,
-            technologies=technologies or [],  # avoid mutable default
-            linkedin_url=linkedinUrl,
-            portfolio_url=portfolioUrl,
+            totalExperienceYears=totalExperienceYears,
+            totalExperienceMonths=totalExperienceMonths,
+            experienceSummary=experienceSummary,
+            preferredMode=preferredMode,
+            availabilityHoursPerWeek=availabilityHoursPerWeek,
+            technologies=technologies or [],
+            linkedinUrl=linkedinUrl,
+            portfolioUrl=portfolioUrl,
         )
+
 
 class MentorOut(BaseModel):
     user: UserOut
@@ -305,36 +293,34 @@ class MentorOut(BaseModel):
     dob: Optional[date] = None
     gender: Optional[GenderEnum] = None
     address: Optional[str] = None
-    # experience
     total_experience_years: Optional[int] = Field(default=None, alias="totalExperienceYears")
     total_experience_months: Optional[int] = Field(default=None, alias="totalExperienceMonths")
     experience_summary: Optional[str] = Field(default=None, alias="experienceSummary")
-    # preferences
     preferred_mode: Optional[ModeEnum] = Field(default=None, alias="preferredMode")
     availability_hours_per_week: Optional[int] = Field(default=None, alias="availabilityHoursPerWeek")
-    # technologies
     technologies: List[str] = Field(default_factory=list)
-    # uploads & links
     resume_url: Optional[str] = Field(default=None, alias="resumeUrl")
     linkedin_url: Optional[str] = Field(default=None, alias="linkedinUrl")
     portfolio_url: Optional[str] = Field(default=None, alias="portfolioUrl")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
+
 class TechnologyOut(BaseModel):
     id: int
     name: str
     model_config = ConfigDict(from_attributes=True)
 
-# --- Combined "me" payload ---
+
+# --- combined "me" payload ---
 class MeOut(BaseModel):
     user: UserOut
     student_profile: Optional[StudentOut] = Field(default=None, alias="studentProfile")
     mentor_profile: Optional[MentorOut] = Field(default=None, alias="mentorProfile")
-
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-# --- Rebuild (helps with forward-ref edges in Pydantic v2) ---
+
+# --- Rebuild (for forward refs) ---
 try:
     StudentRegisterIn.model_rebuild()
     MentorRegisterIn.model_rebuild()
@@ -343,3 +329,31 @@ try:
     MeOut.model_rebuild()
 except Exception:
     pass
+
+
+# --------- Batch Schemas ---------
+class BatchBase(BaseModel):
+    batch_name: str
+    no_of_students: int
+    start_date: date
+    completion_date: date
+    status: Optional[str] = None
+    mentor_id: Optional[int] = None
+
+
+class BatchCreate(BatchBase):
+    pass
+
+
+class BatchUpdate(BaseModel):
+    batch_name: Optional[str] = None
+    no_of_students: Optional[int] = None
+    start_date: Optional[date] = None
+    completion_date: Optional[date] = None
+    status: Optional[str] = None
+    mentor_id: Optional[int] = None
+
+
+class BatchOut(BatchBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
